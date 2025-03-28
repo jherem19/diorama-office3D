@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diorama Interactivo</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            background-color: rgba(2, 2, 2, 0.918);
+        }
+        
+        /* Header estilo minimalista sin fondo */
+        header {
+            position: fixed;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            z-index: 100;
+        }
+        
+        nav {
+            display: flex;
+            gap: 15px;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            background-color: rgba(40, 40, 40, 0.85);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        nav a:hover {
+            background-color: rgba(60, 60, 60, 0.25);
+            transform: scale(1.05);
+        }
+        
+        /* Canvas styles */
+        canvas { 
+            display: block; 
+            cursor: grab;
+            margin-top: 80px;
+        }
+        
+        canvas:active {
+            cursor: grabbing;
+        }
+        
+        /* Reset button */
+        #reset-btn {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 30px;
+            background-color: rgba(40, 40, 40, 0.85);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        
+        #reset-btn:hover {
+            background-color: rgba(60, 60, 60, 0.95);
+            transform: translateX(-50%) scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header minimalista sin barra de fondo -->
+    <header>
+        <nav>
+            <a href="#">Portfolio</a>
+            <a href="#">About me</a>
+            <a href="#">Contact</a>
+        </nav>
+    </header>
+    
+    <!-- Three.js canvas -->
+    
+    <!-- Reset button -->
+    <button id="reset-btn">Reset View</button>
+    
+    <!-- Three.js and dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_encoder.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
+    
+    <script>
+        // Variables globales
+        let scene, camera, renderer, model;
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let targetRotationY = 0;
+        let mouseX = 0;
+        let windowHalfX = window.innerWidth / 2;
+        
+        // Configuración inicial
+        const initialConfig = {
+            camera: {
+                position: { x: 3, y: 3, z: 3 }, // Posición ajustada para mejor visualización inicial
+                lookAt: { x: 0, y: 0, z: 0 },
+                targetPosition: { x: 0, y: 0, z: 5 }, // Para el efecto resorte
+                springFactor: 0.1 // Factor de suavizado para el resorte
+            },
+            model: {
+                position: { x: 0, y: 0, z: 0 },
+                scale: 1,
+                rotation: { y: 0 },
+                targetScale: 1 // Para zoom suave
+            },
+            pan: {
+                speed: 0.001,
+                damping: 0.95 // Amortiguación para el efecto resorte
+            },
+            rotation: {
+                limits: { min: -0.3, max: 0.3 },
+                easing: 0.05
+            },
+            zoom: {
+                min: 0.8,
+                max: 1.2,
+                speed: 0.0005 // Zoom muy sutil
+            }
+        };
+        
+        // Estado actual
+        let currentState = JSON.parse(JSON.stringify(initialConfig));
+        
+        function init() {
+            // Escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x212529);
+            
+            // Cámara
+            camera = new THREE.PerspectiveCamera(
+                45,
+                window.innerWidth / (window.innerHeight - 80),
+                0.1,
+                1000
+            );
+            resetCamera();
+            
+            // Renderizador
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                alpha: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight - 80);
+            renderer.domElement.style.marginTop = '80px';
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+            
+            // Luces mejoradas para mejor visualización inicial
+            setupLights();
+            
+            // Carga del modelo
+            loadModel();
+            
+            // Eventos
+            setupEventListeners();
+            
+            // Botón de reset
+            document.getElementById('reset-btn').addEventListener('click', resetScene);
+            
+            // Animación
+            animate();
+        }
+        
+        function setupLights() {
+            // Luz ambiental más intensa para mejor visualización
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+            scene.add(ambientLight);
+            
+            // Luz principal
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(1, 1, 1).normalize();
+            scene.add(directionalLight);
+            
+            // Luz de relleno
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            fillLight.position.set(-1, -0.5, -1).normalize();
+            scene.add(fillLight);
+        }
+        
+        function loadModel() {
+            const loader = new THREE.GLTFLoader();
+            const dracoLoader = new THREE.DRACOLoader();
+            dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/gltf/');
+            loader.setDRACOLoader(dracoLoader);
+            
+            loader.load(
+                'tu_modelo.glb',
+                (gltf) => {
+                    model = gltf.scene;
+                    
+                    // Centrado automático mejorado
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    
+                    // Centrar el modelo
+                    model.position.x -= center.x;
+                    model.position.y -= center.y;
+                    model.position.z -= center.z;
+                    
+                    // Ajustar escala inicial si el modelo es muy grande o pequeño
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 2.0 / maxDim;
+                    model.scale.set(scale, scale, scale);
+                    currentState.model.scale = scale;
+                    currentState.model.targetScale = scale;
+                    
+                    scene.add(model);
+                    
+                    // Ajustar cámara para enfocar el modelo centrado
+                    camera.lookAt(0, 0, 0);
+                    
+                    applyCurrentState();
+                },
+                undefined,
+                (error) => console.error('Error:', error)
+            );
+        }
+        
+        function setupEventListeners() {
+            // PAN inicio
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                renderer.domElement.style.cursor = 'grabbing';
+            });
+            
+            // PAN fin (inicia efecto resorte)
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+                renderer.domElement.style.cursor = 'grab';
+            });
+            
+            // Controles
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    // PAN con arrastre
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+                    
+                    // Mover la cámara temporalmente
+                    camera.position.x -= deltaX * currentState.pan.speed;
+                    camera.position.y += deltaY * currentState.pan.speed;
+                    
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else {
+                    // Rotación
+                    mouseX = (e.clientX - windowHalfX) / windowHalfX;
+                    targetRotationY = Math.max(
+                        currentState.rotation.limits.min,
+                        Math.min(currentState.rotation.limits.max, mouseX * 0.3)
+                    );
+                }
+            });
+            
+            // Zoom sutil
+            renderer.domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                currentState.model.targetScale -= e.deltaY * currentState.zoom.speed;
+                currentState.model.targetScale = Math.max(
+                    currentState.zoom.min,
+                    Math.min(currentState.zoom.max, currentState.model.targetScale)
+                );
+            });
+            
+            // Responsive
+            window.addEventListener('resize', () => {
+                windowHalfX = window.innerWidth / 2;
+                camera.aspect = window.innerWidth / (window.innerHeight - 80);
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight - 80);
+                renderer.domElement.style.marginTop = '80px';
+            });
+        }
+        
+        function applyCurrentState() {
+            if (model) {
+                // Escala (ZOOM suave)
+                model.scale.set(
+                    currentState.model.scale,
+                    currentState.model.scale,
+                    currentState.model.scale
+                );
+                
+                // Rotación
+                model.rotation.y = currentState.model.rotation.y;
+            }
+        }
+        
+        function resetCamera() {
+            // Posición objetivo para efecto resorte
+            currentState.camera.targetPosition = {
+                x: initialConfig.camera.position.x,
+                y: initialConfig.camera.position.y,
+                z: initialConfig.camera.position.z
+            };
+            
+            camera.position.copy(currentState.camera.targetPosition);
+            camera.lookAt(
+                initialConfig.camera.lookAt.x,
+                initialConfig.camera.lookAt.y,
+                initialConfig.camera.lookAt.z
+            );
+        }
+        
+        function resetScene() {
+            currentState = JSON.parse(JSON.stringify(initialConfig));
+            applyCurrentState();
+            resetCamera();
+            targetRotationY = 0;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Efecto resorte para la cámara (PAN)
+            if (!isDragging) {
+                // Suavizado hacia la posición inicial
+                camera.position.x += (currentState.camera.targetPosition.x - camera.position.x) * currentState.camera.springFactor;
+                camera.position.y += (currentState.camera.targetPosition.y - camera.position.y) * currentState.camera.springFactor;
+                camera.position.z += (currentState.camera.targetPosition.z - camera.position.z) * currentState.camera.springFactor;
+            }
+            
+            // Zoom suave
+            if (model) {
+                currentState.model.scale += (currentState.model.targetScale - currentState.model.scale) * 0.1;
+                model.scale.set(
+                    currentState.model.scale,
+                    currentState.model.scale,
+                    currentState.model.scale
+                );
+                
+                // Rotación suave
+                model.rotation.y += (targetRotationY - model.rotation.y) * currentState.rotation.easing;
+                currentState.model.rotation.y = model.rotation.y;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        init();
+    </script>
+</body>
+</html>
