@@ -12,7 +12,6 @@
             background-color: rgba(2, 2, 2, 0.918);
         }
         
-        /* Header estilo minimalista sin fondo */
         header {
             position: fixed;
             top: 20px;
@@ -44,7 +43,6 @@
             transform: scale(1.05);
         }
         
-        /* Canvas styles */
         canvas { 
             display: block; 
             cursor: grab;
@@ -55,78 +53,139 @@
             cursor: grabbing;
         }
         
-        /* Reset button */
-        #reset-btn {
+        .controls-container {
             position: fixed;
             bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
-            padding: 12px 30px;
-            background-color: rgba(40, 40, 40, 0.85);
-            color: white;
-            border: none;
-            border-radius: 30px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s;
-            backdrop-filter: blur(8px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            gap: 15px;
+            align-items: center;
             z-index: 100;
+            background-color: rgba(40, 40, 40, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 15px;
+            border-radius: 30px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
         
-        #reset-btn:hover {
-            background-color: rgba(60, 60, 60, 0.95);
-            transform: translateX(-50%) scale(1.05);
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #reset-btn, #floor-btn {
+            padding: 12px 20px;
+            background-color: rgba(60, 60, 60, 0.7);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            min-width: 100px;
+            text-align: center;
+        }
+        
+        #reset-btn:hover, #floor-btn:hover {
+            background-color: rgba(80, 80, 80, 0.9);
+            transform: scale(1.05);
+        }
+        
+        #floor-color {
+            width: 0;
+            height: 0;
+            opacity: 0;
+            position: absolute;
+        }
+        
+        .color-preview {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+        }
+        
+        /* Estilos para el control de altura */
+        .floor-height-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+        }
+        
+        #floor-height-slider {
+            width: 120px;
+            cursor: pointer;
+        }
+        
+        #floor-height-value {
+            min-width: 40px;
+            text-align: center;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <!-- Header minimalista sin barra de fondo -->
-<header>
-    <nav>
-        <a href="https://dribbble.com/jherem" target="_blank">Portfolio</a>
-        <a href="https://www.linkedin.com/in/3d-visual-designer-jherem/" target="_blank">Linkedin</a>
-        <a href="https://bento.me/jherem" target="_blank">Contact</a>
-    </nav>
-</header>
+    <header>
+        <nav>
+            <a href="https://dribbble.com/jherem" target="_blank">Portfolio</a>
+            <a href="https://www.linkedin.com/in/3d-visual-designer-jherem/" target="_blank">About me</a>
+            <a href="https://bento.me/jherem" target="_blank">Contact</a>
+        </nav>
+    </header>
     
-    <!-- Three.js canvas -->
+    <div class="controls-container">
+        <div class="control-group">
+            <button id="reset-btn">Reset View</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="floor-btn">Color piso</button>
+            <div class="color-preview" id="color-preview"></div>
+            <input type="color" id="floor-color" value="#333333">
+        </div>
+        
+        <div class="control-group floor-height-control">
+            <span>Altura:</span>
+            <input type="range" id="floor-height-slider" min="-1" max="1" step="0.01" value="-0.01">
+            <span id="floor-height-value">-0.01</span>
+        </div>
+    </div>
     
-    <!-- Reset button -->
-    <button id="reset-btn">Reset View</button>
-    
-    <!-- Three.js and dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_encoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
     
     <script>
-        // Variables globales
-        let scene, camera, renderer, model;
+        let scene, camera, renderer, model, floor;
         let isDragging = false;
         let previousMousePosition = { x: 0, y: 0 };
         let targetRotationY = 0;
         let mouseX = 0;
         let windowHalfX = window.innerWidth / 2;
+        let modelHeight = 0;
+        let floorHeightOffset = -0.01; // Valor inicial de altura del piso
         
-        // Configuración inicial
         const initialConfig = {
             camera: {
-                position: { x: 3, y: 3, z: 3 }, // Posición ajustada para mejor visualización inicial
+                position: { x: 3, y: 3, z: 3 },
                 lookAt: { x: 0, y: 0, z: 0 },
-                targetPosition: { x: 0, y: 0, z: 5 }, // Para el efecto resorte
-                springFactor: 0.1 // Factor de suavizado para el resorte
+                targetPosition: { x: 0, y: 0, z: 5 },
+                springFactor: 0.1
             },
             model: {
                 position: { x: 0, y: 0, z: 0 },
                 scale: 1,
                 rotation: { y: 0 },
-                targetScale: 1 // Para zoom suave
+                targetScale: 1
             },
             pan: {
                 speed: 0.001,
-                damping: 0.95 // Amortiguación para el efecto resorte
+                damping: 0.95
             },
             rotation: {
                 limits: { min: -0.3, max: 0.3 },
@@ -135,17 +194,42 @@
             zoom: {
                 min: 0.8,
                 max: 1.2,
-                speed: 0.0005 // Zoom muy sutil
+                speed: 0.0005
             }
         };
         
-        // Estado actual
         let currentState = JSON.parse(JSON.stringify(initialConfig));
         
         function init() {
             // Escena
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x212529);
+            
+            // Piso infinito
+            createFloor('#333333');
+            
+            // Iluminación mejorada
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
+            scene.add(ambientLight);
+            
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            mainLight.position.set(5, 10, 5);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.camera.near = 0.5;
+            mainLight.shadow.camera.far = 50;
+            mainLight.shadow.bias = -0.001;
+            scene.add(mainLight);
+            
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            fillLight.position.set(-5, 3, -5);
+            scene.add(fillLight);
+            
+            const topLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            topLight.position.set(0, 10, 0);
+            topLight.castShadow = true;
+            scene.add(topLight);
             
             // Cámara
             camera = new THREE.PerspectiveCamera(
@@ -164,10 +248,10 @@
             renderer.setSize(window.innerWidth, window.innerHeight - 80);
             renderer.domElement.style.marginTop = '80px';
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.physicallyCorrectLights = true;
             document.body.appendChild(renderer.domElement);
-            
-            // Luces mejoradas para mejor visualización inicial
-            setupLights();
             
             // Carga del modelo
             loadModel();
@@ -175,27 +259,67 @@
             // Eventos
             setupEventListeners();
             
-            // Botón de reset
+            // Controles
             document.getElementById('reset-btn').addEventListener('click', resetScene);
+            document.getElementById('floor-btn').addEventListener('click', () => {
+                document.getElementById('floor-color').click();
+            });
+            document.getElementById('floor-color').addEventListener('input', (e) => {
+                updateFloorColor(e.target.value);
+                document.getElementById('color-preview').style.backgroundColor = e.target.value;
+            });
+            
+            // Control deslizante de altura
+            const heightSlider = document.getElementById('floor-height-slider');
+            const heightValue = document.getElementById('floor-height-value');
+            
+            heightSlider.addEventListener('input', (e) => {
+                floorHeightOffset = parseFloat(e.target.value);
+                heightValue.textContent = floorHeightOffset.toFixed(2);
+                updateFloorPosition();
+            });
             
             // Animación
             animate();
         }
         
-        function setupLights() {
-            // Luz ambiental más intensa para mejor visualización
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
-            scene.add(ambientLight);
+        function createFloor(color) {
+            if (floor) scene.remove(floor);
             
-            // Luz principal
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            directionalLight.position.set(1, 1, 1).normalize();
-            scene.add(directionalLight);
+            // Piso infinito (usando un plano muy grande)
+            const floorGeometry = new THREE.PlaneGeometry(1000, 1000);
+            const floorMaterial = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(color),
+                roughness: 0.8,
+                metalness: 0.2,
+                side: THREE.DoubleSide
+            });
             
-            // Luz de relleno
-            const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
-            fillLight.position.set(-1, -0.5, -1).normalize();
-            scene.add(fillLight);
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            updateFloorPosition();
+        }
+        
+        function updateFloorPosition() {
+            if (model && floor) {
+                // Calcular la parte más baja del modelo
+                const box = new THREE.Box3().setFromObject(model);
+                const minY = box.min.y * model.scale.y + model.position.y;
+                
+                // Posicionar el piso usando el offset controlable
+                floor.position.y = minY + floorHeightOffset;
+            } else {
+                floor.position.y = -0.5; // Posición por defecto
+            }
+        }
+        
+        function updateFloorColor(color) {
+            if (floor) {
+                floor.material.color.set(new THREE.Color(color));
+            }
         }
         
         function loadModel() {
@@ -209,17 +333,26 @@
                 (gltf) => {
                     model = gltf.scene;
                     
-                    // Centrado automático mejorado
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            
+                            if (child.material) {
+                                child.material.roughness = 0.5;
+                                child.material.metalness = 0.1;
+                            }
+                        }
+                    });
+                    
                     const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
                     
-                    // Centrar el modelo
                     model.position.x -= center.x;
                     model.position.y -= center.y;
                     model.position.z -= center.z;
                     
-                    // Ajustar escala inicial si el modelo es muy grande o pequeño
                     const maxDim = Math.max(size.x, size.y, size.z);
                     const scale = 2.0 / maxDim;
                     model.scale.set(scale, scale, scale);
@@ -227,10 +360,10 @@
                     currentState.model.targetScale = scale;
                     
                     scene.add(model);
-                    
-                    // Ajustar cámara para enfocar el modelo centrado
                     camera.lookAt(0, 0, 0);
                     
+                    // Actualizar posición del piso
+                    updateFloorPosition();
                     applyCurrentState();
                 },
                 undefined,
@@ -239,33 +372,27 @@
         }
         
         function setupEventListeners() {
-            // PAN inicio
             renderer.domElement.addEventListener('mousedown', (e) => {
                 isDragging = true;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
                 renderer.domElement.style.cursor = 'grabbing';
             });
             
-            // PAN fin (inicia efecto resorte)
             renderer.domElement.addEventListener('mouseup', () => {
                 isDragging = false;
                 renderer.domElement.style.cursor = 'grab';
             });
             
-            // Controles
             renderer.domElement.addEventListener('mousemove', (e) => {
                 if (isDragging) {
-                    // PAN con arrastre
                     const deltaX = e.clientX - previousMousePosition.x;
                     const deltaY = e.clientY - previousMousePosition.y;
                     
-                    // Mover la cámara temporalmente
                     camera.position.x -= deltaX * currentState.pan.speed;
                     camera.position.y += deltaY * currentState.pan.speed;
                     
                     previousMousePosition = { x: e.clientX, y: e.clientY };
                 } else {
-                    // Rotación
                     mouseX = (e.clientX - windowHalfX) / windowHalfX;
                     targetRotationY = Math.max(
                         currentState.rotation.limits.min,
@@ -274,7 +401,6 @@
                 }
             });
             
-            // Zoom sutil
             renderer.domElement.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 currentState.model.targetScale -= e.deltaY * currentState.zoom.speed;
@@ -284,7 +410,6 @@
                 );
             });
             
-            // Responsive
             window.addEventListener('resize', () => {
                 windowHalfX = window.innerWidth / 2;
                 camera.aspect = window.innerWidth / (window.innerHeight - 80);
@@ -296,20 +421,17 @@
         
         function applyCurrentState() {
             if (model) {
-                // Escala (ZOOM suave)
                 model.scale.set(
                     currentState.model.scale,
                     currentState.model.scale,
                     currentState.model.scale
                 );
-                
-                // Rotación
                 model.rotation.y = currentState.model.rotation.y;
+                updateFloorPosition();
             }
         }
         
         function resetCamera() {
-            // Posición objetivo para efecto resorte
             currentState.camera.targetPosition = {
                 x: initialConfig.camera.position.x,
                 y: initialConfig.camera.position.y,
@@ -329,20 +451,23 @@
             applyCurrentState();
             resetCamera();
             targetRotationY = 0;
+            
+            // Resetear también la altura del piso
+            document.getElementById('floor-height-slider').value = -0.01;
+            document.getElementById('floor-height-value').textContent = "-0.01";
+            floorHeightOffset = -0.01;
+            updateFloorPosition();
         }
         
         function animate() {
             requestAnimationFrame(animate);
             
-            // Efecto resorte para la cámara (PAN)
             if (!isDragging) {
-                // Suavizado hacia la posición inicial
                 camera.position.x += (currentState.camera.targetPosition.x - camera.position.x) * currentState.camera.springFactor;
                 camera.position.y += (currentState.camera.targetPosition.y - camera.position.y) * currentState.camera.springFactor;
                 camera.position.z += (currentState.camera.targetPosition.z - camera.position.z) * currentState.camera.springFactor;
             }
             
-            // Zoom suave
             if (model) {
                 currentState.model.scale += (currentState.model.targetScale - currentState.model.scale) * 0.1;
                 model.scale.set(
@@ -351,7 +476,6 @@
                     currentState.model.scale
                 );
                 
-                // Rotación suave
                 model.rotation.y += (targetRotationY - model.rotation.y) * currentState.rotation.easing;
                 currentState.model.rotation.y = model.rotation.y;
             }
