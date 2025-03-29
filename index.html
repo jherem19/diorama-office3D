@@ -18,12 +18,27 @@
             width: 100%;
             display: flex;
             justify-content: center;
+            align-items: center;
             z-index: 100;
+            gap: 20px;
+        }
+        
+        .logo {
+            height: 40px;
+            width: 40px;
+            border-radius: 50%;
+            border: 0px solid rgb(36, 36, 36);
+            object-fit: cover;
+            background-color: #333; /* Color de fondo si la imagen no carga */
+            /* Imagen en Base64 - reemplaza esto con tu imagen */
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSIyMCIgeT0iMjUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iI2ZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SEg8L3RleHQ+PC9zdmc+');
+            background-size: cover;
         }
         
         nav {
             display: flex;
             gap: 15px;
+            align-items: center;
         }
         
         nav a {
@@ -75,7 +90,7 @@
             gap: 10px;
         }
         
-        #reset-btn, #floor-btn {
+        .control-btn {
             padding: 12px 20px;
             background-color: rgba(60, 60, 60, 0.7);
             color: white;
@@ -86,29 +101,27 @@
             transition: all 0.3s;
             min-width: 100px;
             text-align: center;
+            backdrop-filter: blur(8px);
         }
         
-        #reset-btn:hover, #floor-btn:hover {
+        .control-btn:hover {
             background-color: rgba(80, 80, 80, 0.9);
             transform: scale(1.05);
         }
         
-        #floor-color {
-            width: 0;
-            height: 0;
-            opacity: 0;
-            position: absolute;
+        .signature {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+            z-index: 100;
+            background-color: rgba(0,0,0,0.5);
+            padding: 8px 15px;
+            border-radius: 20px;
+            backdrop-filter: blur(5px);
         }
         
-        .color-preview {
-            width: 25px;
-            height: 25px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 2px solid white;
-        }
-        
-        /* Estilos para el control de altura */
         .floor-height-control {
             display: flex;
             align-items: center;
@@ -126,10 +139,25 @@
             text-align: center;
             font-size: 14px;
         }
+        
+        .color-preview {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        
+        #floor-color {
+            width: 0;
+            height: 0;
+            opacity: 0;
+            position: absolute;
+        }
     </style>
 </head>
 <body>
     <header>
+        <div class="logo"></div>
         <nav>
             <a href="https://dribbble.com/jherem" target="_blank">Portfolio</a>
             <a href="https://www.linkedin.com/in/3d-visual-designer-jherem/" target="_blank">About me</a>
@@ -137,13 +165,15 @@
         </nav>
     </header>
     
+    <div class="signature">Hector Heredia | 3D Visual Designer</div>
+    
     <div class="controls-container">
         <div class="control-group">
-            <button id="reset-btn">Reset View</button>
+            <button id="reset-btn" class="control-btn">Reset View</button>
         </div>
         
         <div class="control-group">
-            <button id="floor-btn">Color piso</button>
+            <button id="floor-btn" class="control-btn">Color piso</button>
             <div class="color-preview" id="color-preview"></div>
             <input type="color" id="floor-color" value="#333333">
         </div>
@@ -161,14 +191,14 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
     
     <script>
+        // Variables globales
         let scene, camera, renderer, model, floor;
         let isDragging = false;
         let previousMousePosition = { x: 0, y: 0 };
         let targetRotationY = 0;
         let mouseX = 0;
         let windowHalfX = window.innerWidth / 2;
-        let modelHeight = 0;
-        let floorHeightOffset = -0.01; // Valor inicial de altura del piso
+        let floorHeightOffset = -0.01;
         
         const initialConfig = {
             camera: {
@@ -260,24 +290,7 @@
             setupEventListeners();
             
             // Controles
-            document.getElementById('reset-btn').addEventListener('click', resetScene);
-            document.getElementById('floor-btn').addEventListener('click', () => {
-                document.getElementById('floor-color').click();
-            });
-            document.getElementById('floor-color').addEventListener('input', (e) => {
-                updateFloorColor(e.target.value);
-                document.getElementById('color-preview').style.backgroundColor = e.target.value;
-            });
-            
-            // Control deslizante de altura
-            const heightSlider = document.getElementById('floor-height-slider');
-            const heightValue = document.getElementById('floor-height-value');
-            
-            heightSlider.addEventListener('input', (e) => {
-                floorHeightOffset = parseFloat(e.target.value);
-                heightValue.textContent = floorHeightOffset.toFixed(2);
-                updateFloorPosition();
-            });
+            setupControls();
             
             // Animación
             animate();
@@ -286,7 +299,6 @@
         function createFloor(color) {
             if (floor) scene.remove(floor);
             
-            // Piso infinito (usando un plano muy grande)
             const floorGeometry = new THREE.PlaneGeometry(1000, 1000);
             const floorMaterial = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(color),
@@ -305,20 +317,18 @@
         
         function updateFloorPosition() {
             if (model && floor) {
-                // Calcular la parte más baja del modelo
                 const box = new THREE.Box3().setFromObject(model);
                 const minY = box.min.y * model.scale.y + model.position.y;
-                
-                // Posicionar el piso usando el offset controlable
                 floor.position.y = minY + floorHeightOffset;
             } else {
-                floor.position.y = -0.5; // Posición por defecto
+                floor.position.y = -0.5;
             }
         }
         
         function updateFloorColor(color) {
             if (floor) {
                 floor.material.color.set(new THREE.Color(color));
+                document.getElementById('color-preview').style.backgroundColor = color;
             }
         }
         
@@ -333,12 +343,12 @@
                 (gltf) => {
                     model = gltf.scene;
                     
-                    model.traverse((child) => {
-                        if (child.isMesh) {
+                    model.traverse(child => {
+                        if(child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
                             
-                            if (child.material) {
+                            if(child.material) {
                                 child.material.roughness = 0.5;
                                 child.material.metalness = 0.1;
                             }
@@ -361,14 +371,31 @@
                     
                     scene.add(model);
                     camera.lookAt(0, 0, 0);
-                    
-                    // Actualizar posición del piso
                     updateFloorPosition();
                     applyCurrentState();
                 },
                 undefined,
                 (error) => console.error('Error:', error)
             );
+        }
+        
+        function setupControls() {
+            document.getElementById('reset-btn').addEventListener('click', resetScene);
+            document.getElementById('floor-btn').addEventListener('click', () => {
+                document.getElementById('floor-color').click();
+            });
+            document.getElementById('floor-color').addEventListener('input', (e) => {
+                updateFloorColor(e.target.value);
+            });
+            
+            const heightSlider = document.getElementById('floor-height-slider');
+            const heightValue = document.getElementById('floor-height-value');
+            
+            heightSlider.addEventListener('input', (e) => {
+                floorHeightOffset = parseFloat(e.target.value);
+                heightValue.textContent = floorHeightOffset.toFixed(2);
+                updateFloorPosition();
+            });
         }
         
         function setupEventListeners() {
@@ -452,7 +479,6 @@
             resetCamera();
             targetRotationY = 0;
             
-            // Resetear también la altura del piso
             document.getElementById('floor-height-slider').value = -0.01;
             document.getElementById('floor-height-value').textContent = "-0.01";
             floorHeightOffset = -0.01;
