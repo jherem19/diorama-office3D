@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tiny Office 3D</title>
+  <title>Tiny Office 3D - Multi Model</title>
   <style>
-    /* Ajustamos el body para que ocupe toda la ventana */
     html, body {
       margin: 0;
       padding: 0;
@@ -67,7 +66,6 @@
       transform: scale(1.05);
     }
     
-    /* Quitamos el margin-top al canvas para que ocupe toda la pantalla */
     canvas {
       display: block;
       cursor: grab;
@@ -116,6 +114,27 @@
     .control-btn:hover {
       background-color: rgba(80, 80, 80, 0.9);
       transform: scale(1.05);
+    }
+    
+    #model-selector {
+      appearance: none;
+      -webkit-appearance: none;
+      background-color: rgba(60, 60, 60, 0.7);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      min-width: 120px;
+      text-align: center;
+      backdrop-filter: blur(8px);
+    }
+    #model-selector:hover {
+      background-color: rgba(80, 80, 80, 0.9);
+    }
+    #model-selector option {
+      background: #444;
     }
     
     .signature {
@@ -176,6 +195,13 @@
   
   <div class="controls-container">
     <div class="control-group">
+      <select id="model-selector" class="control-btn">
+        <option value="0">Oficina</option>
+        <option value="1">Modelo 2</option>
+        <option value="2">Modelo 3</option>
+      </select>
+    </div>
+    <div class="control-group">
       <button id="reset-btn" class="control-btn">Reset View</button>
     </div>
     <div class="control-group">
@@ -197,7 +223,7 @@
   
   <script>
     // Variables globales
-    let scene, camera, renderer, model, floor;
+    let scene, camera, renderer, floor;
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
     let targetRotationY = 0;
@@ -205,10 +231,19 @@
     let windowHalfX = window.innerWidth / 2;
     let floorHeightOffset = -0.01;
     
+    // Modelos disponibles
+    const modelosDisponibles = [
+      { nombre: "Oficina", ruta: 'tu_modelo.glb' },
+      { nombre: "Modelo 2", ruta: 'models/modelo2.glb' },
+      { nombre: "Modelo 3", ruta: 'models/modelo3.glb' }
+    ];
+    let modelosCargados = [];
+    let modeloActual = null;
+    
     const initialConfig = {
       camera: {
         position: { x: 3, y: 3, z: 3 },
-        lookAt: { x: 0, y: 0, z: 0 },
+        lookAt: { x: 0, y: -.25, z: 0 },
         targetPosition: { x: 0, y: 0, z: 5 },
         springFactor: 0.1
       },
@@ -238,18 +273,17 @@
     function init() {
       // Escena
       scene = new THREE.Scene();
-      // Si deseas el fondo transparente, usa scene.background = null;
       scene.background = new THREE.Color(0x212529);
       
       // Piso infinito
-      createFloor('#333333');
+      createFloor('#1C1A37');
       
       // Iluminación
-      const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
+      const ambientLight = new THREE.AmbientLight(0xffffff, 4.8);
       scene.add(ambientLight);
       
       const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
-      mainLight.position.set(5, 10, 5);
+      mainLight.position.set(5, 20, 5);
       mainLight.castShadow = true;
       mainLight.shadow.mapSize.width = 2048;
       mainLight.shadow.mapSize.height = 2048;
@@ -258,7 +292,7 @@
       mainLight.shadow.bias = -0.001;
       scene.add(mainLight);
       
-      const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      const fillLight = new THREE.DirectionalLight(0xffffff, 3.8);
       fillLight.position.set(-5, 3, -5);
       scene.add(fillLight);
       
@@ -271,7 +305,7 @@
       camera = new THREE.PerspectiveCamera(
         45,
         window.innerWidth / window.innerHeight,
-        0.1,
+        0.7,
         1000
       );
       resetCamera();
@@ -281,7 +315,6 @@
         antialias: true,
         alpha: true
       });
-      // Llenamos toda la ventana
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.shadowMap.enabled = true;
@@ -289,8 +322,8 @@
       renderer.physicallyCorrectLights = true;
       document.body.appendChild(renderer.domElement);
       
-      // Carga del modelo
-      loadModel();
+      // Carga de modelos
+      loadModels();
       
       // Eventos
       setupEventListeners();
@@ -300,6 +333,65 @@
       
       // Animación
       animate();
+    }
+    
+    async function loadModels() {
+      const loader = new THREE.GLTFLoader();
+      const dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/gltf/');
+      loader.setDRACOLoader(dracoLoader);
+      
+      // Cargar todos los modelos
+      for (let i = 0; i < modelosDisponibles.length; i++) {
+        try {
+          const gltf = await loader.loadAsync(modelosDisponibles[i].ruta);
+          const model = gltf.scene;
+          
+          model.traverse(child => {
+            if(child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              if(child.material) {
+                child.material.roughness = 0.5;
+                child.material.metalness = 0.1;
+              }
+            }
+          });
+          
+          // Configuración inicial (invisible)
+          model.visible = false;
+          model.position.set(0, 0, 0);
+          
+          // Centrar y escalar
+          const box = new THREE.Box3().setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          
+          model.position.x -= center.x;
+          model.position.y -= center.y;
+          model.position.z -= center.z;
+          
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 2.0 / maxDim;
+          model.scale.set(scale, scale, scale);
+          
+          scene.add(model);
+          modelosCargados.push(model);
+          
+          // Activar el primer modelo
+          if (i === 0) {
+            model.visible = true;
+            modeloActual = model;
+            currentState.model.scale = scale;
+            currentState.model.targetScale = scale;
+          }
+        } catch (error) {
+          console.error(`Error cargando ${modelosDisponibles[i].nombre}:`, error);
+        }
+      }
+      
+      updateFloorPosition();
+      applyCurrentState();
     }
     
     function createFloor(color) {
@@ -321,9 +413,9 @@
     }
     
     function updateFloorPosition() {
-      if (model && floor) {
-        const box = new THREE.Box3().setFromObject(model);
-        const minY = box.min.y * model.scale.y + model.position.y;
+      if (modeloActual && floor) {
+        const box = new THREE.Box3().setFromObject(modeloActual);
+        const minY = box.min.y * modeloActual.scale.y + modeloActual.position.y;
         floor.position.y = minY + floorHeightOffset;
       } else if (floor) {
         floor.position.y = -0.5;
@@ -337,53 +429,30 @@
       }
     }
     
-    function loadModel() {
-      const loader = new THREE.GLTFLoader();
-      const dracoLoader = new THREE.DRACOLoader();
-      dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/gltf/');
-      loader.setDRACOLoader(dracoLoader);
-      
-      loader.load(
-        'tu_modelo.glb',
-        (gltf) => {
-          model = gltf.scene;
-          
-          model.traverse(child => {
-            if(child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-              if(child.material) {
-                child.material.roughness = 0.5;
-                child.material.metalness = 0.1;
-              }
-            }
-          });
-          
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          
-          model.position.x -= center.x;
-          model.position.y -= center.y;
-          model.position.z -= center.z;
-          
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 2.0 / maxDim;
-          model.scale.set(scale, scale, scale);
-          currentState.model.scale = scale;
-          currentState.model.targetScale = scale;
-          
-          scene.add(model);
-          camera.lookAt(0, 0, 0);
-          updateFloorPosition();
-          applyCurrentState();
-        },
-        undefined,
-        (error) => console.error('Error:', error)
-      );
-    }
-    
     function setupControls() {
+      // Selector de modelos
+      document.getElementById('model-selector').addEventListener('change', (e) => {
+        const index = parseInt(e.target.value);
+        
+        if (modeloActual) {
+          modeloActual.visible = false;
+        }
+        
+        modeloActual = modelosCargados[index];
+        modeloActual.visible = true;
+        
+        // Actualizar escala y posición
+        const box = new THREE.Box3().setFromObject(modeloActual);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2.0 / maxDim;
+        
+        currentState.model.scale = scale;
+        currentState.model.targetScale = scale;
+        updateFloorPosition();
+      });
+      
+      // Controles existentes
       document.getElementById('reset-btn').addEventListener('click', resetScene);
       document.getElementById('floor-btn').addEventListener('click', () => {
         document.getElementById('floor-color').click();
@@ -450,13 +519,13 @@
     }
     
     function applyCurrentState() {
-      if (model) {
-        model.scale.set(
+      if (modeloActual) {
+        modeloActual.scale.set(
           currentState.model.scale,
           currentState.model.scale,
           currentState.model.scale
         );
-        model.rotation.y = currentState.model.rotation.y;
+        modeloActual.rotation.y = currentState.model.rotation.y;
         updateFloorPosition();
       }
     }
@@ -497,16 +566,16 @@
         camera.position.z += (currentState.camera.targetPosition.z - camera.position.z) * currentState.camera.springFactor;
       }
       
-      if (model) {
+      if (modeloActual) {
         currentState.model.scale += (currentState.model.targetScale - currentState.model.scale) * 0.1;
-        model.scale.set(
+        modeloActual.scale.set(
           currentState.model.scale,
           currentState.model.scale,
           currentState.model.scale
         );
         
-        model.rotation.y += (targetRotationY - model.rotation.y) * currentState.rotation.easing;
-        currentState.model.rotation.y = model.rotation.y;
+        modeloActual.rotation.y += (targetRotationY - modeloActual.rotation.y) * currentState.rotation.easing;
+        currentState.model.rotation.y = modeloActual.rotation.y;
       }
       
       renderer.render(scene, camera);
